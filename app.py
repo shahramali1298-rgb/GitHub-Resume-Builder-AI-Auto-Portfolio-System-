@@ -4,53 +4,102 @@ from collections import Counter
 from fpdf import FPDF
 
 # -------------------------------
-# GitHub Fetch
+# PAGE CONFIG (PRO UI)
+# -------------------------------
+st.set_page_config(
+    page_title="GitHub AI Resume Builder",
+    page_icon="🚀",
+    layout="wide"
+)
+
+# -------------------------------
+# CSS (PROFESSIONAL UI)
+# -------------------------------
+st.markdown("""
+<style>
+.main {
+    background-color: #0f172a;
+    color: white;
+}
+.title {
+    font-size: 40px;
+    font-weight: bold;
+    color: #38bdf8;
+}
+.card {
+    background-color: #1e293b;
+    padding: 20px;
+    border-radius: 15px;
+    margin-bottom: 10px;
+}
+.small {
+    color: #94a3b8;
+}
+</style>
+""", unsafe_allow_html=True)
+
+st.markdown("<div class='title'>🚀 GitHub AI Resume Builder</div>", unsafe_allow_html=True)
+
+# -------------------------------
+# REAL GITHUB FETCH (FIXED)
 # -------------------------------
 def get_github_data(username):
+
     user_url = f"https://api.github.com/users/{username}"
     repo_url = f"https://api.github.com/users/{username}/repos"
 
-    user = requests.get(user_url).json()
-    repos = requests.get(repo_url).json()
+    user = requests.get(user_url)
+    repos = requests.get(repo_url)
 
-    return user, repos
+    # REAL FIX: status check
+    if user.status_code != 200:
+        return None, None
+
+    return user.json(), repos.json()
 
 # -------------------------------
-# Skill Extraction
+# SKILL EXTRACTION
 # -------------------------------
 def extract_skills(repos):
     langs = []
     for r in repos:
-        if r.get("language"):
+        if r["language"]:
             langs.append(r["language"])
-
-    return list(Counter(langs).keys())
+    return list(set(langs))
 
 # -------------------------------
-# SIMPLE AI SUMMARY (NO TRANSFORMERS)
+# REAL AI (HUGGINGFACE FREE INFERENCE)
 # -------------------------------
 def generate_ai_summary(name, bio, skills):
-    skills_text = ", ".join(skills)
+
+    API_URL = "https://api-inference.huggingface.co/models/google/flan-t5-small"
+
+    headers = {}
 
     prompt = f"""
-    Developer Name: {name}
-    Bio: {bio}
-    Skills: {skills_text}
+    Write a professional software developer resume summary:
 
-    Write a professional short resume summary in 3 lines.
+    Name: {name}
+    Bio: {bio}
+    Skills: {', '.join(skills)}
+
+    Make it short and impressive.
     """
 
-    # lightweight "AI-like" logic (works everywhere)
-    summary = (
-        f"{name} is a skilled software developer. "
-        f"Experienced in {skills_text}. "
-        f"{bio if bio else 'Passionate about building scalable applications.'}"
-    )
+    try:
+        response = requests.post(API_URL, headers=headers, json={"inputs": prompt})
+        output = response.json()
 
-    return summary
+        if isinstance(output, list):
+            return output[0]["generated_text"]
+        else:
+            return "AI summary not available, fallback used."
+
+    except:
+        return f"{name} is a skilled developer experienced in {', '.join(skills)}."
 
 # -------------------------------
-# PDF Generator
+# PDF GENERATOR
 # -------------------------------
 def create_pdf(name, bio, summary, skills):
     pdf = FPDF()
@@ -64,59 +113,82 @@ def create_pdf(name, bio, summary, skills):
     pdf.cell(200, 10, txt=f"Bio: {bio}", ln=True)
     pdf.ln(5)
 
-    pdf.multi_cell(0, 10, txt=f"Summary:\n{summary}")
+    pdf.multi_cell(0, 10, txt=f"AI Summary:\n{summary}")
     pdf.ln(5)
 
     pdf.multi_cell(0, 10, txt=f"Skills:\n{', '.join(skills)}")
 
     file = "resume.pdf"
     pdf.output(file)
-
     return file
 
 # -------------------------------
-# UI
+# INPUT UI
 # -------------------------------
-st.set_page_config(page_title="GitHub AI Resume Builder", layout="wide")
-
-st.title("🚀 GitHub AI Resume Builder (Fixed Version)")
-st.write("Fully working on Python 3.10 + Streamlit Cloud")
-
 username = st.text_input("Enter GitHub Username")
 
 if st.button("Generate Resume"):
 
-    if username:
-        user, repos = get_github_data(username)
+    if not username.strip():
+        st.warning("Please enter username")
+        st.stop()
 
-        if "message" in user:
-            st.error("User not found!")
-        else:
-            name = user.get("name") or username
-            bio = user.get("bio") or "No bio available"
+    user, repos = get_github_data(username.strip())
 
-            skills = extract_skills(repos)
+    # FIXED ERROR HANDLING
+    if user is None:
+        st.error("❌ GitHub user not found. Check spelling.")
+        st.stop()
 
-            st.subheader("👤 Profile")
-            st.write(name)
-            st.write(bio)
+    name = user.get("name") or username
+    bio = user.get("bio") or "No bio available"
 
-            st.subheader("🧠 Skills")
-            st.write(skills)
+    skills = extract_skills(repos)
 
-            st.subheader("📊 Top Repos")
-            for r in repos[:5]:
-                st.write(f"🔹 {r['name']} ⭐ {r['stargazers_count']}")
+    # ---------------------------
+    # UI CARDS
+    # ---------------------------
+    col1, col2 = st.columns(2)
 
-            summary = generate_ai_summary(name, bio, skills)
+    with col1:
+        st.markdown("<div class='card'>", unsafe_allow_html=True)
+        st.subheader("👤 Profile")
+        st.write("Name:", name)
+        st.write("Bio:", bio)
+        st.markdown("</div>", unsafe_allow_html=True)
 
-            st.subheader("🤖 AI Summary")
-            st.success(summary)
+    with col2:
+        st.markdown("<div class='card'>", unsafe_allow_html=True)
+        st.subheader("🧠 Skills")
+        st.write(", ".join(skills))
+        st.markdown("</div>", unsafe_allow_html=True)
 
-            pdf_file = create_pdf(name, bio, summary, skills)
+    # ---------------------------
+    # REPOS
+    # ---------------------------
+    st.markdown("<div class='card'>", unsafe_allow_html=True)
+    st.subheader("📊 Top Repositories")
 
-            with open(pdf_file, "rb") as f:
-                st.download_button("📥 Download Resume", f, file_name="resume.pdf")
+    for r in repos[:5]:
+        st.write(f"🔹 {r['name']} ⭐ {r['stargazers_count']}")
 
-    else:
-        st.warning("Enter username first")
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    # ---------------------------
+    # AI SUMMARY
+    # ---------------------------
+    st.markdown("<div class='card'>", unsafe_allow_html=True)
+    st.subheader("🤖 AI Generated Summary")
+
+    summary = generate_ai_summary(name, bio, skills)
+    st.success(summary)
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    # ---------------------------
+    # PDF DOWNLOAD
+    # ---------------------------
+    pdf_file = create_pdf(name, bio, summary, skills)
+
+    with open(pdf_file, "rb") as f:
+        st.download_button("📥 Download Resume PDF", f, file_name="resume.pdf")
