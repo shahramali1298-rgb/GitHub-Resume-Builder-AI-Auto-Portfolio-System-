@@ -2,81 +2,100 @@ import streamlit as st
 from transformers import pipeline
 import random
 
-# ----------------------------
-# Page Config
-# ----------------------------
-st.set_page_config(page_title="AI Resume Builder", layout="centered")
+st.set_page_config(page_title="AI GitHub Resume Builder", layout="centered")
 
-st.title("🚀 AI GitHub Resume Builder")
-st.write("Enter any name and generate a complete AI portfolio (Streamlit + HuggingFace)")
+st.title("🚀 AI GitHub Resume Builder (Clean Version)")
+st.write("Generate structured developer profile from any name")
 
 # ----------------------------
-# Safe AI Model Loader (No crash)
+# Model
 # ----------------------------
 @st.cache_resource
 def load_model():
     try:
-        generator = pipeline("text-generation", model="distilgpt2")
-        return generator
+        return pipeline("text-generation", model="distilgpt2")
     except:
         return None
 
 model = load_model()
 
 # ----------------------------
-# Fallback Generator (IMPORTANT)
+# Safe structured fallback
 # ----------------------------
-def fallback_resume(name):
-    skills_pool = [
-        "Python", "Machine Learning", "Data Analysis",
-        "Web Development", "GitHub Projects", "AI Integration"
+def safe_resume(name):
+    skills = [
+        "Python", "Machine Learning", "Data Science",
+        "Web Development", "GitHub Projects", "APIs"
     ]
 
     projects = [
-        "AI Chatbot System",
+        "AI Resume Generator",
         "GitHub Profile Analyzer",
-        "Smart Resume Generator",
-        "Data Science Dashboard",
-        "Automation Script Toolkit"
+        "Portfolio Website Builder",
+        "Chatbot Application",
+        "Automation Scripts Toolkit"
     ]
 
     return f"""
-👤 Name: {name}
+====================================
+👤 GITHUB DEVELOPER PROFILE
+====================================
 
-🧠 About:
-{name} is a passionate developer interested in Artificial Intelligence and modern software development.
+Name: {name}
 
-💡 Skills:
-- {', '.join(random.sample(skills_pool, 4))}
+📌 ABOUT
+{name} is a software developer focused on AI, web development, and scalable applications.
 
-📂 Projects:
-- {random.choice(projects)}
-- {random.choice(projects)}
-- {random.choice(projects)}
+🧠 SKILLS
+- {', '.join(random.sample(skills, 4))}
 
-📊 GitHub Style Summary:
-Active developer building AI-powered and automation-based solutions.
+📂 PROJECTS
+1. {random.choice(projects)}
+2. {random.choice(projects)}
+3. {random.choice(projects)}
 
-⭐ Strengths:
-Problem Solving, Consistency, Fast Learning
+🚀 GITHUB SUMMARY
+Active developer building real-world AI and automation projects.
+
+🔗 PROFILE LINK
+https://github.com/{name.lower().replace(" ", "-")}
+====================================
 """
 
 # ----------------------------
-# AI Generator
+# AI generator (controlled)
 # ----------------------------
-def generate_resume(name):
+def generate(name):
     if model:
         try:
-            prompt = f"Create a professional GitHub developer profile for {name} including skills and projects:"
-            result = model(prompt, max_length=200, num_return_sequences=1)
-            return result[0]["generated_text"]
+            prompt = f"""
+Write ONLY a structured GitHub developer profile.
+
+Name: {name}
+
+Format:
+- About
+- Skills
+- Projects
+- GitHub Summary
+
+Do not add extra text.
+"""
+            out = model(prompt, max_length=180, num_return_sequences=1)[0]["generated_text"]
+
+            # Safety filter (remove garbage)
+            if "API" in out or "hash" in out or "Shahram-ali is" in out:
+                return safe_resume(name)
+
+            return out
+
         except:
-            return fallback_resume(name)
+            return safe_resume(name)
     else:
-        return fallback_resume(name)
+        return safe_resume(name)
 
 # ----------------------------
-# UI Input
+# UI
 # ----------------------------
 name = st.text_input("Enter Your Name")
 
@@ -84,7 +103,7 @@ if st.button("Generate Resume"):
     if name.strip() == "":
         st.warning("Please enter a valid name")
     else:
-        output = generate_resume(name)
+        result = generate(name)
 
-        st.subheader("📄 Generated Resume")
-        st.text_area("Result", output, height=400)
+        st.subheader("📄 Generated Profile")
+        st.text_area("Output", result, height=450)
